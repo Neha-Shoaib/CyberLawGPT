@@ -2,6 +2,4 @@ streamlit>=1.36,<2.0
 groq>=0.30.0
 faiss-cpu>=1.8.0
 sentence-transformers>=3.0.0
-PyMuPDF>=1.24.0
 numpy>=1.26.0
-requests>=2.32.0
