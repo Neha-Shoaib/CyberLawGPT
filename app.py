@@ -1,426 +1,427 @@
 import os
 import re
-import hashlib
-import tempfile
-from io import BytesIO
-
-import faiss
-import fitz  # PyMuPDF
-import numpy as np
-import requests
 import streamlit as st
-from groq import Groq
+import numpy as np
+import faiss
 from sentence_transformers import SentenceTransformer
-
-
-# ============================================================
-# CyberLawGPT
-# RAG chatbot for Pakistan's cyber-law PDF
-# Stack: Streamlit + FAISS + Sentence Transformers + PyMuPDF + Groq
-# ============================================================
-
-APP_NAME = "CyberLawGPT"
-DEFAULT_MODEL = "openai/gpt-oss-120b"
-DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-
-# Put your public PDF URL in Streamlit Secrets:
-# CYBER_LAW_PDF_URL = "https://....../cyber-law.pdf"
-#
-# The attached source used while developing this app is the
-# Prevention of Electronic Crimes Act, 2016 (PECA 2016), as
-# contained in the supplied PDF. The app intentionally uses the
-# exact PDF supplied/configured by the user as its legal corpus.
-PDF_URL = os.getenv("CYBER_LAW_PDF_URL", "").strip()
-
+from groq import Groq
 
 st.set_page_config(
-    page_title=APP_NAME,
+    page_title="CyberLawGPT",
     page_icon="⚖️",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
+# -------------------------------------------------------------------
+# CyberLawGPT
+# Knowledge base manually structured from the supplied:
+# Prevention of Electronic Crimes Act, 2016 (PECA 2016)
+#
+# The PDF is NOT required at runtime and is NOT uploaded by the user.
+# The legal knowledge below is the application's built-in source.
+# -------------------------------------------------------------------
 
-# -----------------------------
-# Styling
-# -----------------------------
-st.markdown(
-    """
-    <style>
-    .main-title {
-        font-size: 2.7rem;
-        font-weight: 800;
-        margin-bottom: 0.1rem;
-    }
-    .subtitle {
-        color: #6b7280;
-        font-size: 1.05rem;
-        margin-bottom: 1.2rem;
-    }
-    .source-box {
-        border: 1px solid rgba(128,128,128,.25);
-        border-radius: 12px;
-        padding: 12px 16px;
-        margin: 8px 0;
-    }
-    .disclaimer {
-        font-size: .85rem;
-        color: #6b7280;
-        border-top: 1px solid rgba(128,128,128,.2);
-        padding-top: 12px;
-        margin-top: 25px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+LAW_DOCUMENT = [
+    {
+        "section": "Section 1 — Short title, extent and commencement",
+        "topic": "Scope of the Act",
+        "text": (
+            "This law is the Prevention of Electronic Crimes Act, 2016. "
+            "It is a law concerning prevention of electronic crimes and related "
+            "matters in Pakistan."
+        ),
+    },
+    {
+        "section": "Section 2 — Definitions",
+        "topic": "Unauthorized access",
+        "text": (
+            "Unauthorized access means access to an information system or data "
+            "without authorization or beyond the authorization given to the person."
+        ),
+    },
+    {
+        "section": "Section 2 — Definitions",
+        "topic": "Unauthorized interception",
+        "text": (
+            "Unauthorized interception concerns interception of information "
+            "transmitted through an information system without lawful authorization."
+        ),
+    },
+    {
+        "section": "Section 2 — Definitions",
+        "topic": "Information system",
+        "text": (
+            "The Act defines an information system in the context of systems "
+            "used for generating, sending, receiving, storing or processing information."
+        ),
+    },
+    {
+        "section": "Section 2 — Definitions",
+        "topic": "Critical infrastructure",
+        "text": (
+            "The Act defines critical infrastructure in relation to an information "
+            "system or infrastructure whose disruption, destruction or compromise "
+            "can affect important public or other critical functions."
+        ),
+    },
+    {
+        "section": "Section 2 — Definitions",
+        "topic": "Service provider",
+        "text": (
+            "The Act includes a definition of service provider covering persons or "
+            "entities that provide services relating to information systems or "
+            "communication systems."
+        ),
+    },
+    {
+        "section": "Section 2 — Definitions",
+        "topic": "Traffic data",
+        "text": (
+            "Traffic data concerns data relating to a communication, including "
+            "information about the origin, destination, route, time, date, size, "
+            "duration or type of underlying service or communication, as covered "
+            "by the Act."
+        ),
+    },
+    {
+        "section": "Section 3 — Unauthorized access to information system or data",
+        "topic": "Unauthorized access",
+        "text": (
+            "A person who intentionally gains unauthorized access to an information "
+            "system or data is dealt with as an offence under the Act. The Act "
+            "provides a punishment for unauthorized access."
+        ),
+    },
+    {
+        "section": "Section 4 — Unauthorized copying or transmission of data",
+        "topic": "Copying or transmitting data",
+        "text": (
+            "Unauthorized copying or transmission of data is an offence under the "
+            "Act where the conduct falls within the conditions prescribed by the section."
+        ),
+    },
+    {
+        "section": "Section 5 — Interference with or damage to information system or data",
+        "topic": "Interference or damage",
+        "text": (
+            "Interference with or damage to an information system or data is "
+            "criminalized by the Act where the statutory requirements of the section "
+            "are satisfied."
+        ),
+    },
+    {
+        "section": "Section 6 — Unauthorized access to critical infrastructure information system or data",
+        "topic": "Critical infrastructure access",
+        "text": (
+            "Unauthorized access to a critical infrastructure information system "
+            "or data is treated as a specific offence under the Act and is subject "
+            "to the punishment provided by the section."
+        ),
+    },
+    {
+        "section": "Chapter II — Offences and Punishments",
+        "topic": "Electronic offences",
+        "text": (
+            "Chapter II establishes electronic offences and corresponding "
+            "punishments. The Act addresses conduct including illegal access, "
+            "unauthorized copying or transmission, interference or damage, and "
+            "unauthorized access involving critical infrastructure."
+        ),
+    },
+    {
+        "section": "Statement of Objects and Reasons",
+        "topic": "Purpose and covered cybercrime",
+        "text": (
+            "The Act addresses cybercrime-related conduct including illegal access "
+            "or hacking, interference such as denial-of-service or distributed "
+            "denial-of-service activity, electronic forgery and fraud, cyber terrorism, "
+            "unauthorized interception, malicious code and identity-related offences."
+        ),
+    },
+    {
+        "section": "Chapter — Prosecution and Trial",
+        "topic": "Prosecution and trial",
+        "text": (
+            "The Act contains provisions dealing with prosecution and trial of "
+            "offences under the Act, including provisions concerning cognizance, "
+            "bailability and compoundability as provided by the Act."
+        ),
+    },
+    {
+        "section": "Chapter — Compensation",
+        "topic": "Compensation",
+        "text": (
+            "The Act contains provisions concerning compensation in connection "
+            "with matters covered by the Act, subject to the statutory requirements."
+        ),
+    },
+    {
+        "section": "Chapter — Investigation and Forensic Procedures",
+        "topic": "Investigation",
+        "text": (
+            "The Act provides a legal framework concerning investigation of "
+            "electronic crimes and forensic procedures, including provisions "
+            "relating to the investigation agency and forensic processes."
+        ),
+    },
+    {
+        "section": "Chapter — Relation with Other Laws",
+        "topic": "Other laws",
+        "text": (
+            "The Act contains provisions concerning its relationship with other "
+            "laws. Questions about another Pakistani statute should not be answered "
+            "as though that statute were contained in this Act."
+        ),
+    },
+    {
+        "section": "Chapter — Rule Making",
+        "topic": "Rules",
+        "text": (
+            "The Act provides for rule-making concerning matters covered by the Act."
+        ),
+    },
+]
 
+# Add a compact legal index with the high-level concepts explicitly identified
+# in the supplied document's objects/reasons section.
+LAW_DOCUMENT.extend([
+    {
+        "section": "PECA 2016 — Core legal concepts",
+        "topic": "Hacking / illegal access",
+        "text": (
+            "Illegal access or hacking is identified among the forms of electronic "
+            "crime addressed by the Act. The relevant statutory provisions should "
+            "be applied according to their specific elements and section wording."
+        ),
+    },
+    {
+        "section": "PECA 2016 — Core legal concepts",
+        "topic": "Denial of service",
+        "text": (
+            "Interference including denial-of-service and distributed denial-of-service "
+            "activity is identified in the Act's statement of objects as cybercrime "
+            "conduct addressed by the legislation."
+        ),
+    },
+    {
+        "section": "PECA 2016 — Core legal concepts",
+        "topic": "Electronic forgery and fraud",
+        "text": (
+            "Electronic forgery and electronic fraud are identified in the Act's "
+            "statement of objects as forms of electronic crime addressed by the law."
+        ),
+    },
+    {
+        "section": "PECA 2016 — Core legal concepts",
+        "topic": "Cyber terrorism",
+        "text": (
+            "Cyber terrorism is identified in the Act's statement of objects as "
+            "conduct addressed by the electronic-crimes legislation."
+        ),
+    },
+    {
+        "section": "PECA 2016 — Core legal concepts",
+        "topic": "Malicious code",
+        "text": (
+            "Malicious code is identified in the Act's statement of objects as "
+            "a category of cybercrime-related conduct addressed by the legislation."
+        ),
+    },
+    {
+        "section": "PECA 2016 — Core legal concepts",
+        "topic": "Identity theft",
+        "text": (
+            "Identity theft is identified in the Act's statement of objects as "
+            "electronic-crime conduct addressed by the legislation."
+        ),
+    },
+])
 
-# -----------------------------
-# Secrets / API
-# -----------------------------
-def get_secret(name: str, default: str = "") -> str:
-    """Read Streamlit secrets first, then environment variables."""
-    try:
-        value = st.secrets.get(name, "")
-        if value:
-            return str(value).strip()
-    except Exception:
-        pass
-    return os.getenv(name, default).strip()
-
-
-GROQ_API_KEY = get_secret("GROQ_API_KEY")
-CONFIGURED_PDF_URL = get_secret("CYBER_LAW_PDF_URL", PDF_URL)
-GROQ_MODEL = get_secret("GROQ_MODEL", DEFAULT_MODEL)
-
-
-# -----------------------------
-# PDF extraction + chunking
-# -----------------------------
-def download_pdf(url: str) -> bytes:
-    """Download a PDF from a public URL."""
-    headers = {"User-Agent": "CyberLawGPT/1.0"}
-    response = requests.get(url, headers=headers, timeout=60)
-    response.raise_for_status()
-
-    content_type = response.headers.get("content-type", "").lower()
-    if "pdf" not in content_type and not response.content.startswith(b"%PDF"):
-        raise ValueError("The configured URL did not return a PDF file.")
-
-    return response.content
-
-
-def extract_pdf_pages(pdf_bytes: bytes):
-    """Extract page-level text from the legal PDF."""
-    document = fitz.open(stream=pdf_bytes, filetype="pdf")
-    pages = []
-
-    for page_number, page in enumerate(document, start=1):
-        text = page.get_text("text").strip()
-        if text:
-            pages.append(
-                {
-                    "page": page_number,
-                    "text": text,
-                }
-            )
-
-    document.close()
-
-    if not pages:
-        raise ValueError(
-            "No selectable text was found in the PDF. "
-            "This version expects a text-based PDF."
-        )
-
-    return pages
-
-
-def clean_text(text: str) -> str:
-    text = text.replace("\x00", " ")
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
-def detect_section(text: str) -> str:
-    """
-    Detect common PECA-style section headings.
-    This is metadata only; the model must rely on retrieved text.
-    """
-    patterns = [
-        r"(?im)^\s*(\d+[A-Z]?)\.\s+([^\n]+)",
-        r"(?im)^\s*section\s+(\d+[A-Z]?)\s*[:.-]?\s*([^\n]+)",
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
-            return f"Section {match.group(1)} — {match.group(2).strip()[:140]}"
-
-    return "Section not confidently detected"
-
-
-def chunk_pages(pages, chunk_size=1100, overlap=180):
-    """
-    Character-based chunks preserve page/section metadata.
-    Overlap helps avoid losing legal context at chunk boundaries.
-    """
+def chunk_text(text, max_chars=850, overlap=120):
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= max_chars:
+        return [text]
     chunks = []
-
-    for page in pages:
-        text = clean_text(page["text"])
-        if not text:
-            continue
-
-        start = 0
-        while start < len(text):
-            end = min(start + chunk_size, len(text))
-            chunk_text = text[start:end].strip()
-
-            if chunk_text:
-                chunks.append(
-                    {
-                        "text": chunk_text,
-                        "page": page["page"],
-                        "section": detect_section(chunk_text),
-                    }
-                )
-
-            if end >= len(text):
-                break
-
-            start = max(end - overlap, start + 1)
-
+    start = 0
+    while start < len(text):
+        end = min(start + max_chars, len(text))
+        if end < len(text):
+            boundary = text.rfind(" ", start, end)
+            if boundary > start + 300:
+                end = boundary
+        chunks.append(text[start:end].strip())
+        if end >= len(text):
+            break
+        start = max(0, end - overlap)
     return chunks
 
+@st.cache_resource(show_spinner="Loading legal knowledge base...")
+def build_index():
+    records = []
+    for item in LAW_DOCUMENT:
+        for i, chunk in enumerate(chunk_text(item["text"])):
+            records.append({
+                "section": item["section"],
+                "topic": item["topic"],
+                "text": chunk,
+                "chunk": i + 1,
+            })
 
-# -----------------------------
-# Embeddings + FAISS
-# -----------------------------
-@st.cache_resource(show_spinner="Loading embedding model...")
-def load_embedding_model():
-    return SentenceTransformer(DEFAULT_EMBEDDING_MODEL)
-
-
-@st.cache_resource(show_spinner="Building legal-law vector index...")
-def build_index(pdf_bytes: bytes, source_id: str):
-    # source_id is intentionally part of the cache signature so that
-    # a changed PDF creates a fresh FAISS index.
-    del source_id
-
-    pages = extract_pdf_pages(pdf_bytes)
-    chunks = chunk_pages(pages)
-
-    if not chunks:
-        raise ValueError("No usable text chunks were created from the PDF.")
-
-    model = load_embedding_model()
-    texts = [item["text"] for item in chunks]
-
+    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
     embeddings = model.encode(
-        texts,
-        convert_to_numpy=True,
+        [r["text"] for r in records],
         normalize_embeddings=True,
         show_progress_bar=False,
-    ).astype("float32")
+    )
+    embeddings = np.asarray(embeddings, dtype="float32")
 
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatIP(dimension)
+    index = faiss.IndexFlatIP(embeddings.shape[1])
     index.add(embeddings)
+    return model, index, records
 
-    return index, chunks
-
-
-def retrieve(query: str, index, chunks, top_k: int = 5):
-    model = load_embedding_model()
-
-    query_embedding = model.encode(
-        [query],
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-    ).astype("float32")
-
-    k = min(top_k, index.ntotal)
-    scores, ids = index.search(query_embedding, k)
+def retrieve(question, model, index, records, top_k):
+    q = model.encode([question], normalize_embeddings=True)
+    q = np.asarray(q, dtype="float32")
+    scores, ids = index.search(q, min(top_k, len(records)))
 
     results = []
     for score, idx in zip(scores[0], ids[0]):
         if idx < 0:
             continue
-
-        item = chunks[int(idx)].copy()
+        item = dict(records[idx])
         item["score"] = float(score)
         results.append(item)
-
     return results
 
+def answer_with_groq(question, context, technicality, response_size,
+                     language, practical_example, caution):
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        st.error("GROQ_API_KEY is not configured.")
+        st.info("For Streamlit Cloud, add GROQ_API_KEY under Settings → Secrets.")
+        st.stop()
 
-# -----------------------------
-# Groq answer generation
-# -----------------------------
-def build_prompt(
-    question: str,
-    contexts,
-    technicality: str,
-    response_size: str,
-    language: str,
-    include_practical: bool,
-    include_caution: bool,
-):
-    context_text = "\n\n".join(
-        [
-            (
-                f"[SOURCE {i} | PDF page {item['page']} | "
-                f"{item['section']} | similarity={item['score']:.3f}]\n"
-                f"{item['text']}"
-            )
-            for i, item in enumerate(contexts, start=1)
-        ]
-    )
+    model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    client = Groq(api_key=api_key)
 
-    practical_instruction = (
-        "If useful, give a short practical example clearly labeled as an example. "
-        if include_practical
-        else "Do not add a practical example unless necessary."
+    language_instruction = {
+        "English": "Answer in English.",
+        "Urdu": "Answer in Urdu script.",
+        "Roman Urdu": "Answer in Roman Urdu.",
+    }[language]
+
+    size_instruction = {
+        "Short": "Give a concise answer with only the necessary legal points.",
+        "Medium": "Give a clear answer with the relevant law and a brief explanation.",
+        "Detailed": "Give a detailed answer with the relevant legal provisions, explanation, and implications.",
+        "Very detailed": "Give a comprehensive but focused answer, explaining the relevant provisions and how they relate to the question.",
+    }[response_size]
+
+    example_instruction = (
+        "Include one clearly labeled practical example if it helps explain the law."
+        if practical_example else
+        "Do not include a practical example unless essential."
     )
 
     caution_instruction = (
-        "End with a short note that this is informational and not a substitute for advice from a qualified Pakistani lawyer. "
-        if include_caution
-        else "Do not add a generic legal disclaimer."
+        "End with a brief legal-information caution that this is not a substitute "
+        "for advice from a qualified Pakistani legal professional."
+        if caution else
+        "Do not add a separate disclaimer paragraph."
     )
 
-    return f"""
-You are CyberLawGPT, a retrieval-augmented legal information assistant.
+    prompt = f"""
+You are CyberLawGPT, a legal-information assistant grounded ONLY in the
+built-in knowledge extracted and structured from the supplied Prevention of
+Electronic Crimes Act, 2016 (PECA 2016).
 
-JURISDICTION:
-Pakistan.
-
-PRIMARY LEGAL SOURCE:
-The user-provided cyber-law PDF. Treat the retrieved passages below as the authoritative
-source for this answer. Do not silently replace them with another law or an internet source.
-
-STRICT RAG RULES:
-1. Answer ONLY from the supplied retrieved passages.
-2. If the retrieved passages do not contain enough information, say:
-   "The supplied PDF does not provide enough information to answer that reliably."
-3. Never invent a section number, punishment, fine, procedure, authority, definition,
-   exception, deadline, or legal conclusion.
-4. Distinguish clearly between what the Act states and your plain-language explanation.
-5. When possible, identify the relevant section number and PDF page.
-6. Do not claim that an action is definitely legal/illegal based only on general knowledge.
-7. If the question concerns a specific real-life dispute, explain the relevant provision
-   but avoid pretending to provide a case-specific legal opinion.
-8. For questions asking about penalties, preserve the wording "may extend to" when the
-   source uses that wording.
-9. Do not cite sources that are not present in the retrieved passages.
-
-USER SETTINGS:
-Technicality: {technicality}
-Response size: {response_size}
-Preferred language: {language}
-{practical_instruction}
-{caution_instruction}
-
-RETRIEVED LEGAL PASSAGES:
-{context_text}
-
-QUESTION:
+USER QUESTION:
 {question}
 
-ANSWER FORMAT:
-- Give the direct answer first.
-- Then explain the relevant legal provision(s).
-- Include section number(s) and PDF page number(s) when supported by the context.
-- For penalties, use a compact bullet list.
-""".strip()
+RELEVANT BUILT-IN LEGAL MATERIAL:
+{context}
 
+STRICT RULES:
+1. Base the answer only on the supplied legal material.
+2. Do not invent a section number, punishment, fine, imprisonment period,
+   procedure, exception, authority, definition, or legal test.
+3. If the supplied material is insufficient, explicitly say:
+   "The available PECA 2016 material in CyberLawGPT does not provide enough
+   information to answer that reliably."
+4. Do not treat a general mention in the Statement of Objects and Reasons as
+   proof of every element or punishment of a specific offence.
+5. When a precise punishment or statutory requirement is not present in the
+   built-in material, say that it is not available rather than guessing.
+6. Distinguish definitions, offences, purposes, and procedural provisions.
+7. Do not claim that PECA covers a matter merely because it sounds like a
+   cybercrime; connect the answer to the retrieved material.
+8. Do not present this as a lawyer-client relationship or case-specific legal
+   advice.
+9. Preserve statutory wording such as "may extend to" when that wording is
+   actually present in the supplied material.
+10. If the question asks about a different Pakistani law that is not represented
+    in the built-in PECA material, clearly state that limitation.
 
-def generate_answer(prompt: str) -> str:
-    if not GROQ_API_KEY:
-        raise RuntimeError(
-            "GROQ_API_KEY is missing. Add it to Streamlit Secrets or as an environment variable."
-        )
+TECHNICALITY:
+{technicality}
 
-    client = Groq(api_key=GROQ_API_KEY)
+RESPONSE SIZE:
+{size_instruction}
+
+LANGUAGE:
+{language_instruction}
+
+EXAMPLE:
+{example_instruction}
+
+CAUTION:
+{caution_instruction}
+
+Answer now.
+"""
 
     completion = client.chat.completions.create(
-        model=GROQ_MODEL,
+        model=model_name,
         messages=[
             {
                 "role": "system",
                 "content": (
-                    "You are a careful Pakistan cyber-law information assistant. "
-                    "You must follow the supplied RAG context and must not fabricate law."
+                    "You are a careful legal-information assistant. "
+                    "Never fabricate legal facts."
                 ),
             },
             {"role": "user", "content": prompt},
         ],
         temperature=0.1,
-        max_tokens=1800,
+        max_tokens=1800 if response_size in ["Detailed", "Very detailed"] else 1000,
     )
+    return completion.choices[0].message.content
 
-    return completion.choices[0].message.content.strip()
+# ------------------------- UI ---------------------------------------
 
-
-# -----------------------------
-# Source loading
-# -----------------------------
-@st.cache_data(show_spinner="Downloading cyber-law PDF...")
-def get_remote_pdf(url: str):
-    return download_pdf(url)
-
-
-def load_source_pdf():
-    """
-    Priority:
-    1. Uploaded PDF during the current session.
-    2. Public PDF URL from CYBER_LAW_PDF_URL.
-    """
-    uploaded = st.session_state.get("uploaded_pdf_bytes")
-    if uploaded:
-        return uploaded, "uploaded-pdf"
-
-    if CONFIGURED_PDF_URL:
-        data = get_remote_pdf(CONFIGURED_PDF_URL)
-        digest = hashlib.sha256(data).hexdigest()
-        return data, digest
-
-    return None, None
-
-
-# -----------------------------
-# UI
-# -----------------------------
-st.markdown('<div class="main-title">⚖️ CyberLawGPT</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="subtitle">'
-    "Ask questions about Pakistan's cyber law using a FAISS + semantic-search RAG pipeline."
-    "</div>",
-    unsafe_allow_html=True,
+st.title("⚖️ CyberLawGPT")
+st.caption(
+    "RAG-based Pakistani cyber-law assistant grounded in the "
+    "Prevention of Electronic Crimes Act, 2016 (PECA)."
 )
 
 with st.sidebar:
-    st.header("⚙️ Answer Controls")
+    st.header("⚙️ Answer Settings")
 
-    technicality = st.select_slider(
-        "Technicality level",
-        options=["Simple", "Balanced", "Technical", "Legal/Technical"],
-        value="Balanced",
-        help="Controls how technical and legally detailed the explanation should be.",
+    technicality = st.selectbox(
+        "Technicality",
+        ["Simple", "Balanced", "Technical", "Legal / Technical"],
+        index=1,
     )
 
-    response_size = st.select_slider(
+    response_size = st.selectbox(
         "Response size",
-        options=["Short", "Medium", "Detailed", "Very detailed"],
-        value="Medium",
+        ["Short", "Medium", "Detailed", "Very detailed"],
+        index=1,
     )
 
     language = st.selectbox(
-        "Answer language",
+        "Language",
         ["English", "Urdu", "Roman Urdu"],
         index=0,
     )
@@ -430,154 +431,92 @@ with st.sidebar:
         min_value=2,
         max_value=10,
         value=5,
-        help="Higher values provide more source context but may be less focused.",
     )
 
-    include_practical = st.checkbox(
-        "Include practical example",
+    practical_example = st.checkbox(
+        "Include a practical example",
         value=True,
     )
 
-    include_caution = st.checkbox(
-        "Include legal-information caution",
+    caution = st.checkbox(
+        "Show legal-information caution",
         value=True,
     )
 
     st.divider()
-    st.header("📄 Legal Source")
 
-    uploaded_file = st.file_uploader(
-        "Optional: upload a cyber-law PDF",
-        type=["pdf"],
-        help="If supplied, this PDF is used instead of the configured remote PDF.",
-    )
-
-    if uploaded_file is not None:
-        st.session_state["uploaded_pdf_bytes"] = uploaded_file.getvalue()
-        st.success("Uploaded PDF selected.")
-    elif "uploaded_pdf_bytes" in st.session_state:
-        if st.button("Clear uploaded PDF"):
-            del st.session_state["uploaded_pdf_bytes"]
-            st.rerun()
-
-    if CONFIGURED_PDF_URL:
-        st.caption("A default PDF URL is configured.")
-    else:
-        st.warning(
-            "No CYBER_LAW_PDF_URL is configured. Upload a PDF above or add the URL "
-            "to Streamlit Secrets."
-        )
-
-    st.divider()
+    st.subheader("Knowledge Source")
+    st.success("PECA 2016 knowledge is built into the application.")
     st.caption(
-        "Model: " + GROQ_MODEL + "\n\n"
-        "Embeddings: all-MiniLM-L6-v2\n\n"
-        "Vector store: FAISS"
+        "No PDF upload is required at runtime. The application uses a "
+        "FAISS vector index generated from the structured legal knowledge."
     )
 
+    st.divider()
+    st.caption("Model: openai/gpt-oss-120b via Groq")
+    st.caption("Embeddings: all-MiniLM-L6-v2")
 
-# Load/build index
-try:
-    pdf_bytes, source_id = load_source_pdf()
+model, index, records = build_index()
 
-    if pdf_bytes is None:
-        st.info(
-            "Upload the supplied cyber-law PDF from the sidebar, or configure "
-            "`CYBER_LAW_PDF_URL` in Streamlit Secrets."
-        )
-        st.stop()
-
-    index, chunks = build_index(pdf_bytes, source_id)
-
-    st.success(
-        f"Legal knowledge base ready — {len(chunks)} searchable passages indexed."
-    )
-
-except Exception as exc:
-    st.error(f"Could not initialize the legal knowledge base: {exc}")
-    st.stop()
-
-
-# -----------------------------
-# Chat state
-# -----------------------------
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "Hello! I’m **CyberLawGPT**. Ask me about a cyber-law issue in Pakistan, "
-                "and I’ll retrieve relevant provisions from the configured legal PDF."
-            ),
-        }
-    ]
+    st.session_state.messages = []
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-
 question = st.chat_input(
-    "Example: What is the punishment for unauthorized access under the Act?"
+    "Ask a question about an electronic crime under PECA 2016..."
 )
 
 if question:
     st.session_state.messages.append({"role": "user", "content": question})
-
     with st.chat_message("user"):
         st.markdown(question)
 
     with st.chat_message("assistant"):
-        with st.spinner("Searching the legal corpus and generating an answer..."):
-            try:
-                results = retrieve(question, index, chunks, top_k=top_k)
+        with st.spinner("Finding the relevant PECA provisions..."):
+            results = retrieve(question, model, index, records, top_k)
 
-                if not results:
-                    answer = (
-                        "The supplied PDF does not provide enough information to answer "
-                        "that reliably."
-                    )
-                    st.markdown(answer)
-                else:
-                    prompt = build_prompt(
-                        question=question,
-                        contexts=results,
-                        technicality=technicality,
-                        response_size=response_size,
-                        language=language,
-                        include_practical=include_practical,
-                        include_caution=include_caution,
-                    )
-
-                    answer = generate_answer(prompt)
-                    st.markdown(answer)
-
-                    with st.expander("📚 Retrieved legal sources"):
-                        for i, item in enumerate(results, start=1):
-                            st.markdown(
-                                f"**Source {i} — PDF page {item['page']} — "
-                                f"{item['section']} — similarity {item['score']:.3f}**"
-                            )
-                            st.write(item["text"])
-
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": answer}
+            context_parts = []
+            for i, r in enumerate(results, 1):
+                context_parts.append(
+                    f"[Source {i}]\n"
+                    f"Section/Part: {r['section']}\n"
+                    f"Topic: {r['topic']}\n"
+                    f"Material: {r['text']}"
                 )
 
-            except Exception as exc:
-                error_message = f"Sorry, the answer could not be generated: {exc}"
-                st.error(error_message)
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": error_message}
+            context = "\n\n".join(context_parts)
+            response = answer_with_groq(
+                question,
+                context,
+                technicality,
+                response_size,
+                language,
+                practical_example,
+                caution,
+            )
+
+        st.markdown(response)
+
+        with st.expander("🔎 Retrieved legal material used"):
+            for i, r in enumerate(results, 1):
+                st.markdown(
+                    f"**{i}. {r['section']}** — {r['topic']}  \n"
+                    f"Similarity: `{r['score']:.3f}`"
                 )
+                st.write(r["text"])
+                st.divider()
 
+        st.session_state.messages.append(
+            {"role": "assistant", "content": response}
+        )
 
-st.markdown(
-    '<div class="disclaimer">'
-    "CyberLawGPT is a document-grounded informational tool. It is not a law firm, "
-    "does not create an advocate-client relationship, and should not replace advice "
-    "from a qualified Pakistani legal professional. Answers are limited to the "
-    "configured/uploaded PDF."
-    "</div>",
-    unsafe_allow_html=True,
+st.divider()
+st.caption(
+    "CyberLawGPT provides informational answers based on its built-in "
+    "PECA 2016 knowledge. It is not a law firm and does not create an "
+    "advocate-client relationship. For a real case, consult a qualified "
+    "legal professional in Pakistan."
 )
