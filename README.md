@@ -1,369 +1,397 @@
+1470910659_707.pdf
+PDF
+Act as an AI expert and create a drag application using Python, Streamlit, FAIss. Make sure to write three files only: app.py, requirements.txt, and README.md. Use Grok API, G-R-O-Q Grok API. Also give options on UI to set the technicality level, response size, and any other field that you think nice to have in this app. Cyber laws PDF is attached. Write the code according to the cyber laws. Make sure this app free to run on Colab and Streamlit Cloud. Answer any type of question according to the relative cyber law in Pakistan's Act. This is a PDF link is given below: download and create embedding on startup.Name of this app will be CyberLawGPT.
+
+Done. I created CyberLawGPT as a 3-file RAG application using:
+
+Streamlit
+FAISS
+Sentence Transformers
+PyMuPDF
+Groq API
+openai/gpt-oss-120b
+Pakistan's Prevention of Electronic Crimes Act, 2016 (PECA) as the legal source.
+
+The supplied PDF is indeed the Prevention of Electronic Crimes Act, 2016, covering unauthorized access, data copying, cyber stalking, spoofing, malicious code, electronic fraud, investigation powers, etc.
+
+Files
+
+Download app.py
+
+Download requirements.txt
+
+Download README.md
+
+Important implementation detail
+
+You asked for only three files, so I did not add the PDF as a fourth project file.
+
+Instead, app.py supports two ways of loading the legal PDF:
+
+Streamlit UI upload — upload your attached PECA PDF directly.
+Automatic startup download — set:
+CYBER_LAW_PDF_URL = "https://your-public-url/cyber-law.pdf"
+
+Then CyberLawGPT will:
+
+PDF URL
+   ↓
+Download PDF
+   ↓
+PyMuPDF extraction
+   ↓
+Chunk legal text
+   ↓
+Sentence Transformer embeddings
+   ↓
+FAISS index
+   ↓
+User question
+   ↓
+Relevant legal sections
+   ↓
+Groq GPT-OSS 120B
+   ↓
+Grounded answer
+
+The app also has Technicality, Response Size, Language, Top-K retrieval, Practical Example, and Legal Caution controls.
+
+One clarification: you wrote “G-R-O-Q Grok API” — the API used in the code is Groq, as requested by the spelling G-R-O-Q, not xAI's Grok API.
+
+The README contains the complete Colab + Streamlit Cloud setup, including the required GROQ_API_KEY and PDF URL secrets. 
+
+app.py
+Code
+requirements.txt
+Document
+README.md
+Document
+I don't want you to add the PDF and get text from that PDF. I want you to read the laws and then make the app according to that laws that were defined in that PDF.
+
+Yes — I understand the distinction now.
+
+You do not want the app to use the PDF as its runtime knowledge source.
+
+You want me to:
+
+Read and study the Cyber Laws PDF (PECA 2016).
+Understand the laws, offences, definitions, punishments, procedures, etc. defined in it.
+Encode that legal knowledge/rules into CyberLawGPT itself.
+The deployed app should not require the user to upload the PDF.
+The app should answer questions based on the laws I extracted/structured from the PDF.
+FAISS/RAG can still be used, but the knowledge base should be created from the laws during development, not by asking the end user to provide the PDF.
+It should remain a 3-file project only:
+app.py
+requirements.txt
+README.md
+Groq should be used with openai/gpt-oss-120b.
+It should run on Colab and Streamlit Cloud.
+
+So the architecture should instead be:
+
+PECA PDF → I study/structure the laws → built-in legal knowledge dataset in app.py → embeddings → FAISS → user question → relevant laws retrieved → Groq generates answer
+
+rather than:
+
+User uploads PDF → app extracts PDF → embeddings → answer
+
+And importantly, I should not silently add unrelated Pakistani law/general legal knowledge. The answers should stay grounded in the PECA material you provided. The PDF contains, among other things, definitions, offences and punishments, critical-infrastructure provisions, investigation/trial provisions, and related legal provisions.
+
+I can rebuild the three files accordingly, with the laws themselves embedded into the application rather than the PDF.
+
+okay so give me the response
+
+Yes. I rebuilt it according to what you clarified.
+
+CyberLawGPT — 3 files only
+
+The new version does not ask the user to upload the PECA PDF and does not download/read the PDF at runtime.
+
+Instead:
+
+PECA 2016 PDF → laws studied and structured → legal knowledge built into app.py → Sentence Transformers → FAISS → Groq openai/gpt-oss-120b
+
+The app includes controls for:
+
+Technicality: Simple / Balanced / Technical / Legal-Technical
+Response size: Short / Medium / Detailed / Very detailed
+Language: English / Urdu / Roman Urdu
+Number of retrieved legal passages
+Practical examples
+Legal-information caution
+Retrieved legal material display
+
+The built-in knowledge covers the PECA material from your PDF, including unauthorized access, unauthorized copying/transmission, interference/damage, critical infrastructure, definitions, hacking, DoS/DDoS, electronic forgery/fraud, cyber terrorism, malicious code, identity theft, prosecution/trial, investigation, compensation, etc.
+
+Files
+Download app.py
+Download requirements.txt
+Download README.md
+
+Groq model: openai/gpt-oss-120b
+Embedding model: sentence-transformers/all-MiniLM-L6-v2
+
+One important design choice: the application is instructed not to invent a punishment, section number, exception, procedure, or other legal detail when that information isn't present in its built-in PECA knowledge. This is especially important for a legal RAG application. 
+
+app.py
+Code
+requirements.txt
+Document
+README.md
+Document
+You’re out of data analysis for now. Start a free Plus trial for more, or try again tomorrow after 9:23 PM.
+Try Plus free
+
+Library
+/
+README.md
 ⚖️ CyberLawGPT
 
-CyberLawGPT is a Retrieval-Augmented Generation (RAG) application for asking questions about Pakistan's cyber law.
-
-It uses:
+CyberLawGPT is a RAG-based Pakistani cyber-law information assistant built with:
 
 Python
+Streamlit
+FAISS
+Sentence Transformers
+Groq API
+openai/gpt-oss-120b
+Important design choice
 
-Streamlit — web UI
+CyberLawGPT does not require the PECA PDF to be uploaded by the user.
 
-PyMuPDF — PDF text extraction
+The supplied Prevention of Electronic Crimes Act, 2016 (PECA 2016) was studied and its relevant legal concepts were structured into the application's built-in legal knowledge base.
 
-Sentence Transformers — semantic embeddings
+At startup, CyberLawGPT:
 
-FAISS — vector similarity search
-
-Groq API — LLM answer generation
-
-openai/gpt-oss-120b — default Groq model
-
-The legal knowledge base is the cyber-law PDF supplied/configured by the user. The app is designed so that answers are grounded in retrieved passages rather than general model knowledge.
-
-The supplied PDF used for this project is the Prevention of Electronic Crimes Act, 2016 (PECA 2016). The document states that the Act is called the Prevention of Electronic Crimes Act, 2016 and extends to the whole of Pakistan. It also describes its purpose as addressing unauthorized acts involving information systems and related offences, investigation, prosecution and trial.
-
-1. How CyberLawGPT works
-
-The app follows this pipeline:
-
-Cyber-law PDF
-     ↓
-PyMuPDF text extraction
-     ↓
-Text cleaning + overlapping chunks
-     ↓
+Built-in PECA legal knowledge
+          ↓
 Sentence Transformer embeddings
-     ↓
+          ↓
 FAISS vector index
-     ↓
+          ↓
 User question
-     ↓
-Question embedding
-     ↓
-Top-k relevant legal passages
-     ↓
-Groq / openai/gpt-oss-120b
-     ↓
-Grounded legal explanation
+          ↓
+Relevant legal passages
+          ↓
+Groq + openai/gpt-oss-120b
+          ↓
+Answer
 
-The app builds the FAISS index automatically when the source PDF is first loaded.
+The original PDF is therefore not a runtime dependency.
 
-2. Important: only three project files
+Features
+Legal RAG
 
-This project contains exactly these three code/document files:
+Questions are converted into embeddings and matched against the built-in PECA knowledge using FAISS.
+
+Technicality control
+
+Users can choose:
+
+Simple
+Balanced
+Technical
+Legal / Technical
+Response size
+
+Users can choose:
+
+Short
+Medium
+Detailed
+Very detailed
+Language
+
+Users can choose:
+
+English
+Urdu
+Roman Urdu
+Additional controls
+Number of retrieved legal passages
+Practical example on/off
+Legal-information caution on/off
+Retrieved legal material viewer
+Chat history during the current session
+PECA knowledge covered
+
+The built-in knowledge is structured around material from the supplied PECA 2016 document, including:
+
+Definitions
+Unauthorized access
+Unauthorized interception
+Unauthorized copying/transmission
+Interference with or damage to information systems/data
+Unauthorized access involving critical infrastructure
+Electronic crimes and punishments as described in the Act
+Hacking / illegal access
+Denial-of-service and distributed denial-of-service concepts mentioned in the Act's objects
+Electronic forgery and fraud
+Cyber terrorism
+Malicious code
+Identity theft
+Prosecution and trial
+Cognizance
+Bailability
+Compoundability
+Compensation
+Investigation and forensic procedures
+Relation with other laws
+Rule making
+Legal grounding rule
+
+The application instructs the LLM not to invent missing legal details.
+
+For example, if the built-in material does not contain a precise punishment, the model is told to say that the available material does not provide that detail instead of guessing.
+
+This is important because a legal RAG application should distinguish between:
+
+What the Act explicitly states.
+What is only mentioned in the Act's Statement of Objects and Reasons.
+Information that is not available in the application's knowledge base.
+1. Get a Groq API key
+
+Create an API key from Groq.
+
+Do not put the API key directly inside app.py.
+
+Set:
+
+GROQ_API_KEY=your_api_key_here
+
+Optional model variable:
+
+GROQ_MODEL=openai/gpt-oss-120b
+
+The application already defaults to:
+
+openai/gpt-oss-120b
+2. Run locally
+
+Create the project:
 
 CyberLawGPT/
 ├── app.py
 ├── requirements.txt
 └── README.md
 
-The PDF is not required to be committed as a fourth project file.
-
-Instead, you can either:
-
-Upload the PDF through the Streamlit sidebar, or
-
-Configure a public PDF URL using CYBER_LAW_PDF_URL.
-
-For Streamlit Cloud, option 2 is convenient if you have hosted the PDF at a stable public URL.
-
-3. Groq API key
-
-Create a Groq API key from your Groq account.
-
-For local/Colab execution:
-
-export GROQ_API_KEY="your_key_here"
-
-On Windows PowerShell:
-
-$env:GROQ_API_KEY="your_key_here"
-
-For Streamlit Cloud:
-
-Go to:
-
-Your App → Settings → Secrets
-
-Add:
-
-GROQ_API_KEY = "your_groq_api_key"
-CYBER_LAW_PDF_URL = "https://your-public-host/cyber-law.pdf"
-GROQ_MODEL = "openai/gpt-oss-120b"
-
-Do not commit your API key to GitHub.
-
-4. Source PDF
-
-The application is intentionally document-grounded.
-
-For the supplied project PDF, use the Prevention of Electronic Crimes Act, 2016 document.
-
-The PDF includes provisions covering subjects such as:
-
-Unauthorized access
-
-Unauthorized copying/transmission
-
-Interference with information systems/data
-
-Critical infrastructure offences
-
-Cyber terrorism
-
-Electronic forgery
-
-Electronic fraud
-
-Identity information
-
-Unauthorized SIM issuance
-
-Unauthorized interception
-
-Offences against dignity
-
-Offences involving modesty/minors
-
-Malicious code
-
-Cyber stalking
-
-Spamming
-
-Spoofing
-
-Investigation powers
-
-Preservation/acquisition of data
-
-Traffic-data retention
-
-Search and seizure
-
-Disclosure of content data
-
-Real-time collection
-
-Forensic laboratory
-
-Confidentiality
-
-International cooperation
-
-Prosecution and trial
-
-The source document also contains definitions and procedural provisions. CyberLawGPT retrieves the relevant portions before asking the language model to formulate the response.
-
-5. Run locally
-
 Install dependencies:
 
 pip install -r requirements.txt
 
-Then:
+Set your API key.
+
+Windows PowerShell:
+
+$env:GROQ_API_KEY="your_api_key_here"
+
+Linux/macOS:
+
+export GROQ_API_KEY="your_api_key_here"
+
+Run:
 
 streamlit run app.py
+3. Run on Google Colab
 
-Open the local Streamlit URL shown in the terminal.
+Upload the three files to Colab or clone your GitHub repository.
 
-6. Run on Google Colab
-
-In a Colab cell:
+Install dependencies:
 
 !pip install -r requirements.txt
 
-Set the Groq key:
+Set the API key:
 
 import os
-os.environ["GROQ_API_KEY"] = "your_groq_api_key"
+os.environ["GROQ_API_KEY"] = "your_api_key_here"
 
-If using a public PDF URL:
+Run Streamlit:
 
-os.environ["CYBER_LAW_PDF_URL"] = "https://your-public-host/cyber-law.pdf"
+!streamlit run app.py &>/content/logs.txt &
 
-Start Streamlit:
+For a public Colab demo, use a suitable tunnel such as Cloudflare Tunnel or another tunnel service.
 
-!streamlit run app.py &>/content/streamlit.log &
+4. Deploy on Streamlit Cloud
 
-Then expose the Streamlit port with your preferred Colab tunneling method.
-
-The first run may take longer because the Sentence Transformer model has to be downloaded.
-
-7. Run on Streamlit Cloud
-
-Create a GitHub repository.
-
-Add:
+Push:
 
 app.py
 requirements.txt
 README.md
 
-Deploy the repository on Streamlit Community Cloud.
+to GitHub.
 
-Add these secrets:
+In Streamlit Cloud, add the secret:
 
-GROQ_API_KEY = "your_groq_api_key"
-CYBER_LAW_PDF_URL = "https://your-public-host/cyber-law.pdf"
+GROQ_API_KEY = "your_api_key_here"
 GROQ_MODEL = "openai/gpt-oss-120b"
 
-Deploy.
+Then deploy app.py.
 
-Why use a URL for the PDF?
+No PDF upload or PDF URL is required.
 
-This keeps the GitHub project limited to the requested three files. The app downloads the PDF during initialization and creates the embeddings/FAISS index automatically.
+Why FAISS is used
 
-If you do not want a remote URL, simply upload the PDF in the sidebar after the app starts.
+FAISS provides vector similarity search.
 
-8. UI controls
-
-CyberLawGPT includes several controls:
-
-Technicality level
-
-Simple
-
-Balanced
-
-Technical
-
-Legal/Technical
-
-Response size
-
-Short
-
-Medium
-
-Detailed
-
-Very detailed
-
-Answer language
-
-English
-
-Urdu
-
-Roman Urdu
-
-Retrieved passages
-
-Controls how many semantic-search results are supplied to the LLM.
-
-Practical example
-
-Optionally asks the model to include a short example.
-
-Legal-information caution
-
-Optionally adds a short statement that the output is informational and not a substitute for professional legal advice.
-
-9. RAG safeguards
-
-CyberLawGPT uses explicit grounding instructions.
-
-The model is told to:
-
-Use the retrieved PDF passages as the primary legal source.
-
-Avoid inventing section numbers.
-
-Avoid inventing fines or imprisonment terms.
-
-Avoid inventing procedures or exceptions.
-
-Mention the relevant section/page where supported.
-
-Say when the retrieved PDF does not contain enough information.
-
-Distinguish the Act's wording from a plain-language explanation.
-
-Avoid presenting the output as a case-specific legal opinion.
-
-This is especially important for legal applications.
-
-10. Example questions
-
-Try:
-
-What is unauthorized access under the Act?
-
-What is the punishment for unauthorized copying or transmission of data?
-
-What does the Act say about cyber stalking?
-
-What is spoofing and what punishment is provided?
-
-What does the Act say about malicious code?
-
-What powers does an authorized officer have during search and seizure?
-
-How long can traffic data be retained according to the Act?
-
-What does the Act say about real-time collection of information?
-
-What happens when a cyber offence involves a minor?
-
-11. Technical notes
-
-Embeddings
-
-The app uses:
+The application's legal passages are embedded using:
 
 sentence-transformers/all-MiniLM-L6-v2
 
-This is a lightweight sentence-embedding model suitable for a free Streamlit/Colab setup.
+The embeddings are stored in a FAISS IndexFlatIP index.
 
-Vector database
+When a user asks a question:
 
-FAISS uses normalized embeddings with inner-product similarity.
+Question
+   ↓
+Question embedding
+   ↓
+FAISS similarity search
+   ↓
+Relevant PECA passages
+   ↓
+Groq
+   ↓
+Answer
 
-Because the vectors are normalized, inner product behaves like cosine similarity for retrieval.
+This reduces the chance that the language model answers from unrelated general knowledge.
 
-LLM
+Environment variables
+Variable	Required	Default
+GROQ_API_KEY	Yes	None
+GROQ_MODEL	No	openai/gpt-oss-120b
+Example questions
 
-The default model is:
+Try:
 
-openai/gpt-oss-120b
+What is unauthorized access under PECA?
+What does PECA say about unauthorized copying of data?
+What is critical infrastructure in the context of PECA?
+Does PECA address denial-of-service attacks?
+What cybercrime categories are mentioned in the Statement of Objects and Reasons?
+What provisions deal with prosecution and trial?
+Limitations
 
-through the Groq API.
+This application is intentionally grounded in the supplied PECA 2016 material.
 
-You can change it without editing the application by setting:
+It should not be treated as a complete database of every Pakistani cyber-related statute, amendment, regulation, notification, or court judgment.
 
-GROQ_MODEL = "your_available_groq_model"
+If a question requires information that is absent from the built-in knowledge base, CyberLawGPT should say so rather than fabricate an answer.
 
-12. Free-tier considerations
+Laws can also change. For a real legal matter, verify the current law and consult a qualified Pakistani legal professional.
 
-The application itself is designed to avoid paid vector databases or paid embedding APIs.
+Project structure
 
-However:
+Only three project files are required:
 
-Groq API availability and limits can change.
+app.py
+requirements.txt
+README.md
 
-Streamlit Cloud resource limits can change.
+The PECA PDF is not bundled with the project and is not required at runtime.
 
-The Sentence Transformer model must be downloaded.
+License / legal notice
 
-The PDF must be accessible through the configured URL if you use URL mode.
+This project is an educational legal-information application.
 
-Large PDFs require more memory and startup time.
-
-For the supplied 29-page legal document, this architecture is intentionally lightweight.
-
-13. Legal disclaimer
-
-CyberLawGPT is an educational/document-grounded AI application.
-
-It is not a lawyer, does not establish an advocate-client relationship, and should not be relied upon as a substitute for advice from a qualified Pakistani legal professional.
-
-The application intentionally answers from the configured/uploaded PDF. If the PDF does not support an answer, the system should state that limitation rather than fabricate a legal rule.
-
-14. Project structure
-
-CyberLawGPT/
-│
-├── app.py              # Streamlit UI + PDF processing + embeddings + FAISS + Groq
-├── requirements.txt    # Python dependencies
-└── README.md           # Setup and deployment instructions
+CyberLawGPT is not a law firm, does not create an advocate-client relationship, and does not replace professional legal advice.
